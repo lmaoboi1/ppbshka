@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Phone Packages</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <!-- Fonts -->
+  <link href="https://fonts.googleapis.com/css?family=Montserrat:500,600,700&display=swap" rel="stylesheet">
+  <!-- Leaflet CSS (Map) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  
+  <style>
+    /* --- Reset & Base --- */
+    html, body { 
+      margin: 0; padding: 0; 
+      background: #ffffff; 
+      font-family: 'Montserrat', sans-serif; 
+      height: 100%; width: 100%;
+      overflow: hidden; /* Prevent body scroll, handle inside container */
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+    /* --- App Container (Full Screen) --- */
+    .container {
+      width: 100%;
+      height: 100%;
+      background: #ffffff;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden; /* Prevent container scroll, we want a fixed app feel */
+    }
+
+    /* --- Header --- */
+    .main-header {
+      width: 100%;
+      padding: 16px 0;
+      background: linear-gradient(135deg, #3066eb 0%, #b27ce6 100%);
+      color: #fff;
+      font-size: 20px;
+      font-weight: 700;
+      text-align: center;
+      box-shadow: 0 4px 15px rgba(48, 102, 235, 0.25);
+      z-index: 10;
+      flex-shrink: 0;
+    }
+
+    /* --- Selection Area --- */
+    .selector-area {
+      padding: 10px 24px 0 24px;
+      flex-shrink: 0;
+      background: #fff;
+      position: relative;
+      z-index: 5;
+      display: flex;
+      flex-direction: column;
+      gap: 12px; /* Uniform spacing */
+    }
+    
+    .select-label {
+      font-size: 12px;
+      color: #8a94a6;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 4px;
+      font-weight: 700;
+    }
+
+    /* Brand Button */
+    .brand-select-btn {
+      width: 100%;
+      padding: 12px 18px;
+      border-radius: 14px;
+      border: 1px solid #eef2f6;
+      background: #f8faff;
+      color: #263453;
+      font-family: inherit;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      outline: none;
+      transition: all 0.2s;
+    }
+    .brand-select-btn:active { background: #edf2fc; border-color: #377ffd; }
+
+    /* Color Selection */
+    .color-select-box {
+      display: flex;
+      justify-content: flex-start;
+      gap: 16px;
+    }
+    .color-dot {
+      width: 38px; height: 38px;
+      border-radius: 50%;
+      border: 2px solid #fff;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+      position: relative;
+    }
+    .color-dot.selected { transform: scale(1.1); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+    .color-dot.selected::after {
+      content: ''; position: absolute; top: -5px; left: -5px; right: -5px; bottom: -5px;
+      border-radius: 50%; border: 2px solid #3066eb;
+    }
+
+    /* Memory Selection */
+    .memory-select-box {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+    }
+    .memory-btn {
+      padding: 10px 0;
+      border-radius: 12px;
+      border: 1px solid #eef2f6;
+      background: #fff;
+      color: #556075;
+      font-family: inherit; font-size: 13px; font-weight: 600;
+      cursor: pointer; transition: all 0.2s;
+    }
+    .memory-btn.selected {
+      background: #3066eb; color: #fff; border-color: #3066eb;
+      box-shadow: 0 4px 12px rgba(48, 102, 235, 0.3);
+    }
+
+    /* --- Carousel / Gallery Area --- */
+    .carousel-wrapper {
+      flex: 1; /* Take remaining space */
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end; /* Push content towards bottom, let flex-grow handle top */
+      align-items: center;
+      position: relative;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.4s ease;
+      min-height: 0; 
+      padding-bottom: 20px; 
+      overflow: hidden; /* Ensure nothing spills out */
+    }
+    .carousel-wrapper.visible { opacity: 1; pointer-events: auto; }
+
+    /* The Phone Stage */
+    .phone-stage {
+      flex: 1; /* This makes the image area flexible! */
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      perspective: 1000px;
+      width: 100%;
+      min-height: 0; /* Critical for shrinking */
+      margin-top: 10px;
+    }
+    
+    .phone-box {
+      /* Interaction Fixes */
+      touch-action: none; 
+      user-select: none;
+      
+      background: transparent;
+      box-shadow: none;
+      padding: 0;
+      width: 100%;
+      max-width: 380px;
+      height: 100%; 
+      
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      z-index: 2;
+      transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+
+    .img-container {
+      width: 100%; 
+      height: 100%; 
+      position: relative;
+      display: flex; align-items: center; justify-content: center;
+    }
+    
+    /* Placeholder Skeleton */
+    .img-placeholder {
+      position: absolute; 
+      top: 50%; left: 50%; 
+      transform: translate(-50%, -50%);
+      width: 60%; height: 70%; /* Relative size to fit container */
+      max-width: 200px;
+      background: #f0f2f5; 
+      border-radius: 24px;
+      z-index: 1; 
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse { 0% {opacity:0.6;} 50% {opacity:1;} 100% {opacity:0.6;} }
+
+    .phone-img {
+      max-width: 100%; 
+      max-height: 100%; /* Scale within the flex container */
+      object-fit: contain; 
+      z-index: 2;
+      transition: opacity 0.3s; opacity: 0; pointer-events: none;
+      filter: drop-shadow(0 15px 30px rgba(0,0,0,0.15));
+    }
+    .phone-img.loaded { opacity: 1; }
+
+    .phone-name { display: none; }
+
+    /* Choose Button */
+    .choose-btn {
+      flex-shrink: 0; /* Never shrink the button */
+      margin-top: 15px;
+      margin-bottom: 25px; /* Lift up from bottom */
+      background: #263453;
+      color: #fff;
+      font-size: 16px; font-weight: 700;
+      padding: 16px 60px;
+      border-radius: 30px;
+      border: none;
+      box-shadow: 0 10px 25px rgba(38, 52, 83, 0.2);
+      cursor: pointer;
+      opacity: 0;
+      transform: translateY(20px);
+      transition: all 0.3s;
+      z-index: 10;
+    }
+    .carousel-wrapper.visible .choose-btn {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .choose-btn:active { transform: scale(0.95); }
+
+    /* --- Popups & Modals --- */
+    
+    .popup-bg {
+      display: none; position: fixed; inset: 0; z-index: 100;
+      background: rgba(0,0,0,0.5); backdrop-filter: blur(2px);
+      align-items: flex-end; justify-content: center;
+    }
+    .popup-card {
+      background: #fff; width: 100%;
+      border-radius: 24px 24px 0 0;
+      padding: 24px;
+      animation: slideUp 0.3s ease-out;
+      max-height: 80vh; overflow-y: auto;
+    }
+    @keyframes slideUp { from {transform: translateY(100%);} to {transform: translateY(0);} }
+
+    .brand-item {
+      padding: 16px;
+      font-size: 16px; font-weight: 600; color: #263453;
+      border-bottom: 1px solid #f0f2f5; cursor: pointer;
+      display: flex; justify-content: space-between;
+    }
+    .brand-item.selected { color: #3066eb; background: #f8faff; }
+
+    /* Order Form */
+    .order-form-bg {
+      display: none; position: fixed; inset: 0; z-index: 200;
+      background: #fff; /* Full screen white bg */
+      flex-direction: column;
+      animation: slideLeft 0.3s ease-out;
+      overflow-y: auto;
+    }
+    @keyframes slideLeft { from {transform: translateX(100%);} to {transform: translateX(0);} }
+
+    .order-form-container {
+      width: 100%; max-width: 500px; margin: 0 auto;
+      padding: 24px;
+      display: flex; flex-direction: column; gap: 20px;
+    }
+
+    .form-header-row {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+    }
+    .back-btn {
+      font-size: 24px; background: none; border: none; cursor: pointer; padding: 5px;
+    }
+
+    .map-container {
+      width: 100%; height: 250px;
+      border-radius: 16px;
+      overflow: hidden;
+      border: 2px solid #eef2f6;
+      margin-top: 10px;
+      position: relative;
+      z-index: 1; /* Keep map below overlays */
+    }
+    
+    .input-group label {
+      display: block; font-size: 12px; font-weight: 700; color: #8a94a6; margin-bottom: 6px; text-transform: uppercase;
+    }
+    .input-group input {
+      width: 100%; padding: 14px;
+      border: 2px solid #edf2f7; border-radius: 12px;
+      font-size: 16px; outline: none; transition: 0.2s;
+      background: #fcfdfe;
+    }
+    .input-group input:focus { border-color: #3066eb; background: #fff; }
+
+    .submit-btn {
+      width: 100%; padding: 16px;
+      border: none; border-radius: 14px;
+      background: linear-gradient(90deg, #3066eb, #5e8ef7);
+      color: #fff; font-size: 18px; font-weight: 700;
+      cursor: pointer; box-shadow: 0 4px 12px rgba(48, 102, 235, 0.3);
+      margin-top: 10px;
+    }
+
+    /* Success Screen */
+    .success-screen {
+      display: none; position: fixed; inset: 0; z-index: 300;
+      background: #fff;
+      flex-direction: column; align-items: center; justify-content: center;
+      text-align: center;
+      animation: fadeIn 0.5s;
+    }
+    @keyframes fadeIn { from {opacity:0;} to {opacity:1;} }
+
+    .success-text h2 { margin: 0; color: #263453; font-size: 28px; }
+    .success-text p { color: #8a94a6; font-size: 16px; margin-top: 10px; }
+    
+    /* Countdown Styling */
+    .timer-display {
+      font-size: 42px;
+      font-weight: 700;
+      color: #3066eb;
+      font-variant-numeric: tabular-nums;
+      margin-top: 5px;
+      letter-spacing: -1px;
+    }
+    .timer-label {
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #8a94a6;
+      margin-top: 20px;
+      font-weight: 600;
+    }
+
+    .home-btn {
+      margin-top: 40px; padding: 12px 30px;
+      background: #f0f2f5; color: #263453; border-radius: 20px;
+      text-decoration: none; font-weight: 600; border: none; cursor: pointer;
+    }
+
+  </style>
+</head>
+<body>
+
+  <div class="container" id="main-container">
+    <div class="main-header">Phone Market</div>
+    
+    <div class="selector-area">
+      <!-- Brand Selector -->
+      <div class="select-label" style="margin-top:0;">Choose Brand</div>
+      <button class="brand-select-btn" id="brand-btn">
+        <span id="brand-btn-text">Select Brand</span>
+        <svg width="12" height="8" viewBox="0 0 12 8" fill="none"><path d="M1 1.5L6 6.5L11 1.5" stroke="#A6B8D2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+
+      <!-- Color Selector -->
+      <div class="select-label">Select Color</div>
+      <div class="color-select-box" id="color-select-box"></div>
+
+      <!-- Memory Selector -->
+      <div class="select-label">Storage Capacity</div>
+      <div class="memory-select-box" id="memory-select-box"></div>
+    </div>
+
+    <!-- Gallery / Carousel Section -->
+    <div class="carousel-wrapper" id="carousel-wrapper">
+      <div class="phone-stage">
+        <div class="phone-box" id="phone-box">
+          <div class="img-container">
+            <div class="img-placeholder"></div>
+            <img id="phone-img" class="phone-img" src="" alt="Phone Preview" draggable="false">
+          </div>
+          <div id="phone-name" class="phone-name">iPhone 15</div>
+        </div>
+      </div>
+
+      <!-- Choose This Button -->
+      <button class="choose-btn" id="choose-btn">CHOOSE THIS</button>
+    </div>
+  </div>
+
+  <!-- Brand Selection Popup -->
+  <div class="popup-bg" id="brand-popup-bg">
+    <div class="popup-card">
+      <h3 style="margin-top:0; color:#263453;">Select Brand</h3>
+      <div id="brand-list"></div>
+    </div>
+  </div>
+
+  <!-- Order Form Full Screen -->
+  <div class="order-form-bg" id="order-form-bg">
+    <div class="order-form-container">
+      <div class="form-header-row">
+        <button class="back-btn" id="form-back-btn">&#8592;</button>
+        <h2 style="margin:0; font-size:22px; color:#263453;">Delivery Details</h2>
+      </div>
+
+      <div style="display:flex; align-items:center; gap:12px; background:#f8faff; padding:12px; border-radius:12px;">
+        <img id="form-thumb" src="" style="width:50px; height:50px; object-fit:contain;" />
+        <div>
+          <div id="form-model-name" style="font-weight:700; color:#263453;"></div>
+          <div id="form-model-detail" style="font-size:13px; color:#888;"></div>
+        </div>
+      </div>
+      
+      <div class="input-group">
+        <label>Your Name</label>
+        <input type="text" id="of-name" placeholder="John Doe" required>
+      </div>
+
+      <div class="input-group">
+        <label>Delivery Location (Tap Map to Pin)</label>
+        <div id="map" class="map-container"></div>
+        <p style="font-size:12px; color:#888; margin-top:5px; text-align:center;">
+          Selected: <span id="location-text">No location set</span>
+        </p>
+      </div>
+
+      <button class="submit-btn" id="final-submit-btn">Place Order</button>
+    </div>
+  </div>
+
+  <!-- Success Screen -->
+  <div class="success-screen" id="success-screen">
+    <!-- Lottie Animation - Iframe Implementation -->
+    <iframe src="https://lottie.host/embed/0ff415a3-aabd-4575-b25d-3fe744e0900a/4vw0OmZySn.lottie" style="border: none; width: 350px; height: 350px; max-width: 85vw; max-height: 85vw;"></iframe>
+    
+    <div class="success-text">
+      <h2>Congratulations!</h2>
+      <div class="timer-label">Estimated Delivery Time</div>
+      <div id="countdown" class="timer-display">02:00:00</div>
+    </div>
+    <button class="home-btn" onclick="location.reload()">Back to Home</button>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+  <script>
+    // --- Data ---
+    const brandLabels = { "Apple": "Apple iPhone", "Samsung": "Samsung Galaxy", "Google": "Google Pixel" };
+    const colorVariants = [
+      { label: "Graphite", code: "#383a40" }, { label: "Ultramarine", code: "#4c6ef5" },
+      { label: "Mint", code: "#38d9a9" }, { label: "Titanium", code: "#f1f3f5" }
+    ];
+    const memoryVariants = ["128 GB", "256 GB", "512 GB", "1 TB"];
+    
+    // UPDATED Phones Array with SINGLE Hero Images
+    const phones = [
+      // iPhones - Each has a unique hero image from the provided list
+      { brand: "Apple", name: "iPhone 15", imgs: ["https://i.ibb.co/qLr2yf19/17pro-Lavander-1.png"]},
+      { brand: "Apple", name: "iPhone 15 Pro Max", imgs: ["https://i.ibb.co/xKWg0R27/17pro-Sage-1.png"]},
+      { brand: "Apple", name: "iPhone 16", imgs: ["https://i.ibb.co/0y4ZVXQD/17pro-Max-Cosmic-Orange-1.png"]},
+      { brand: "Apple", name: "iPhone 16 Pro Max", imgs: ["https://i.ibb.co/hRgw1wkq/17pro-Max-Deep-Blue-1.png"]},
+      
+      // Samsungs - Hero Images
+      { brand: "Samsung", name: "Galaxy S23", imgs: ["https://i.ibb.co/4R0sM734/s23-8-256gb-phantom-black-2653854.png"]},
+      { brand: "Samsung", name: "Galaxy S23 Ultra", imgs: ["https://i.ibb.co/0RxZvF47/s23-ultra-8-256gb-phantom-26713013.png"]},
+      { brand: "Samsung", name: "Galaxy S25", imgs: ["https://i.ibb.co/dYbK7rd/s25-black.png"]},
+      { brand: "Samsung", name: "Galaxy S25 Ultra", imgs: ["https://i.ibb.co/73tKFZ5/s25-ultra-black.png"]},
+      
+      // Pixels - Hero Images
+      { brand: "Google", name: "Pixel 8", imgs: ["https://i.ibb.co/GY5Zwmv/9-black.png"]},
+      { brand: "Google", name: "Pixel 8 Pro", imgs: ["https://i.ibb.co/W42VhzYj/9pro-black.png"]},
+      { brand: "Google", name: "Pixel 9", imgs: ["https://i.ibb.co/GY5Zwmv/9-black.png"]},
+      { brand: "Google", name: "Pixel 9 Pro", imgs: ["https://i.ibb.co/W42VhzYj/9pro-black.png"]}
+    ];
+
+    // --- State ---
+    const brands = [...new Set(phones.map(p => p.brand))];
+    let state = { brand: "", colorIdx: -1, memoryIdx: -1, filteredPhones: [], currPhoneIdx: 0 };
+    let map, marker, countdownInterval;
+
+    const els = {
+      brandBtn: document.getElementById('brand-btn'),
+      brandBtnText: document.getElementById('brand-btn-text'),
+      brandPopup: document.getElementById('brand-popup-bg'),
+      brandList: document.getElementById('brand-list'),
+      colorBox: document.getElementById('color-select-box'),
+      memBox: document.getElementById('memory-select-box'),
+      carousel: document.getElementById('carousel-wrapper'),
+      phoneBox: document.getElementById('phone-box'),
+      phoneImg: document.getElementById('phone-img'),
+      phoneName: document.getElementById('phone-name'),
+      // Removed dotsContainer
+      chooseBtn: document.getElementById('choose-btn'),
+      // Forms
+      orderForm: document.getElementById('order-form-bg'),
+      formBackBtn: document.getElementById('form-back-btn'),
+      formThumb: document.getElementById('form-thumb'),
+      formModel: document.getElementById('form-model-name'),
+      formDetail: document.getElementById('form-model-detail'),
+      submitBtn: document.getElementById('final-submit-btn'),
+      locationText: document.getElementById('location-text'),
+      successScreen: document.getElementById('success-screen'),
+      countdown: document.getElementById('countdown')
+    };
+
+    // --- Init ---
+    renderBrandBtn();
+    renderColors();
+    renderMemory();
+    
+    // Fallback Image
+    els.phoneImg.onerror = () => {
+      els.phoneImg.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2U1ZTdlYiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxyZWN0IHg9IjUiIHk9IjIiIHdpZHRoPSIxNCIgaGVpZ2h0PSIyMCIgcng9IjIiIHJ5PSIyIj48L3JlY3Q+PGxpbmUgeDE9IjEyIiB5MT0iMTgiIHgyPSIxMiIg5TI9IjE4Ij48L2xpbmU+PC9zdmc+'; 
+      els.phoneImg.classList.add('loaded');
+    };
+    els.phoneImg.onload = () => els.phoneImg.classList.add('loaded');
+
+    // UI Events
+    els.brandBtn.onclick = () => { els.brandPopup.style.display = 'flex'; renderBrandList(); };
+    els.brandPopup.onclick = (e) => { if(e.target === els.brandPopup) els.brandPopup.style.display='none'; };
+    
+    // Choose Button -> Open Form
+    els.chooseBtn.onclick = openOrderForm;
+    els.formBackBtn.onclick = () => { els.orderForm.style.display = 'none'; };
+    els.submitBtn.onclick = handleFinalSubmit;
+
+    // --- Interaction: Finger Swipe Logic ---
+    let startX = 0;
+    let currentX = 0;
+    let isDragging = false;
+    
+    // Touch Events
+    // IMPORTANT: added { passive: false } to allow e.preventDefault()
+    els.phoneBox.addEventListener('touchstart', (e) => {
+      startX = e.touches[0].clientX;
+      currentX = startX; 
+      isDragging = true;
+      els.phoneBox.style.transition = 'none';
+    }, { passive: false });
+    
+    els.phoneBox.addEventListener('touchmove', (e) => {
+      if(!isDragging) return;
+      if(e.cancelable) e.preventDefault(); 
+
+      currentX = e.touches[0].clientX;
+      let diff = currentX - startX;
+      els.phoneBox.style.transform = `translateX(${diff}px) rotate(${diff/20}deg)`;
+    }, { passive: false });
+    
+    els.phoneBox.addEventListener('touchend', (e) => {
+      isDragging = false;
+      els.phoneBox.style.transition = 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)'; 
+      let diff = currentX - startX;
+      
+      if (Math.abs(diff) > 50) { 
+        if(diff < 0) slideNext();
+        else slidePrev();
+      } else {
+        els.phoneBox.style.transform = 'translateX(0) rotate(0)';
+      }
+      startX = 0; currentX = 0;
+    });
+
+    // Mouse Events (for desktop testing)
+    els.phoneBox.addEventListener('mousedown', (e) => {
+      startX = e.clientX;
+      isDragging = true;
+      els.phoneBox.style.transition = 'none';
+    });
+    window.addEventListener('mousemove', (e) => {
+      if(!isDragging) return;
+      currentX = e.clientX;
+      let diff = currentX - startX;
+      els.phoneBox.style.transform = `translateX(${diff}px) rotate(${diff/20}deg)`;
+    });
+    window.addEventListener('mouseup', (e) => {
+      if(!isDragging) return;
+      isDragging = false;
+      els.phoneBox.style.transition = 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)';
+      let diff = currentX - startX;
+      if (Math.abs(diff) > 100) {
+        if(diff < 0) slideNext(); else slidePrev();
+      } else {
+        els.phoneBox.style.transform = 'translateX(0) rotate(0)';
+      }
+    });
+
+
+    // --- Core Logic ---
+
+    function renderBrandBtn() {
+      els.brandBtnText.innerText = state.brand ? brandLabels[state.brand] : "Select Brand";
+      els.brandBtnText.style.color = state.brand ? "#263453" : "#a6b8d2";
+    }
+
+    function renderBrandList() {
+      els.brandList.innerHTML = brands.map(b => `
+        <div class="brand-item ${b === state.brand ? 'selected' : ''}" onclick="selectBrand('${b}')">
+          <span>${brandLabels[b]}</span>
+          ${b === state.brand ? '<span style="color:#3066eb;">&#10003;</span>' : ''}
+        </div>
+      `).join('');
+    }
+
+    function renderColors() {
+      els.colorBox.innerHTML = colorVariants.map((c, i) => `
+        <div class="color-dot ${i === state.colorIdx ? 'selected' : ''}" 
+             style="background:${c.code}" onclick="selectColor(${i})"></div>
+      `).join('');
+    }
+
+    function renderMemory() {
+      els.memBox.innerHTML = memoryVariants.map((m, i) => `
+        <button class="memory-btn ${i === state.memoryIdx ? 'selected' : ''}" 
+                onclick="selectMemory(${i})">${m}</button>
+      `).join('');
+    }
+
+    window.selectBrand = (b) => {
+      state.brand = b;
+      state.filteredPhones = phones.filter(p => p.brand === b);
+      state.currPhoneIdx = 0;
+      // Reset selections
+      state.colorIdx = -1; 
+      state.memoryIdx = -1;
+      
+      els.brandPopup.style.display = 'none';
+      renderBrandBtn(); 
+      renderColors(); 
+      renderMemory(); 
+      checkVisibility();
+    };
+
+    window.selectColor = (i) => { state.colorIdx = i; renderColors(); checkVisibility(); };
+    window.selectMemory = (i) => { state.memoryIdx = i; renderMemory(); checkVisibility(); };
+
+    function checkVisibility(updateImgOnly = false) {
+      // Visibility Logic: Brand AND Color AND Memory must be selected
+      if(state.brand && state.colorIdx > -1 && state.memoryIdx > -1) {
+        if(!els.carousel.classList.contains('visible')) {
+          renderCarouselView();
+          els.carousel.classList.add('visible');
+        } else if (updateImgOnly) {
+           renderCarouselView();
+        }
+      } else {
+        els.carousel.classList.remove('visible');
+      }
+    }
+
+    function renderCarouselView() {
+      if(state.filteredPhones.length === 0) return;
+      const phone = state.filteredPhones[state.currPhoneIdx];
+      
+      els.phoneBox.style.transform = 'translateX(0) rotate(0)'; 
+      els.phoneImg.classList.remove('loaded');
+      
+      setTimeout(() => {
+        els.phoneName.innerText = phone.name;
+        // IMAGE LOGIC: Always use index 0, ignoring color selection
+        els.phoneImg.src = phone.imgs[0];
+      }, 10);
+    }
+
+    function slideNext() {
+      state.currPhoneIdx = (state.currPhoneIdx + 1) % state.filteredPhones.length;
+      renderCarouselView();
+    }
+    function slidePrev() {
+      state.currPhoneIdx = (state.currPhoneIdx - 1 + state.filteredPhones.length) % state.filteredPhones.length;
+      renderCarouselView();
+    }
+
+    // --- Order Form & Map ---
+
+    function openOrderForm() {
+      const phone = state.filteredPhones[state.currPhoneIdx];
+      
+      // Default to first options if not selected
+      const cIdx = state.colorIdx > -1 ? state.colorIdx : 0;
+      const mIdx = state.memoryIdx > -1 ? state.memoryIdx : 0;
+      
+      const colorName = colorVariants[cIdx].label;
+      const memName = memoryVariants[mIdx];
+      
+      els.formThumb.src = phone.imgs[0]; // Matches carousel
+      els.formModel.innerText = phone.name;
+      els.formDetail.innerText = `${colorName} - ${memName}`;
+      els.orderForm.style.display = 'flex';
+      
+      // Initialize Map (Leaflet)
+      setTimeout(() => {
+        if(!map) {
+          map = L.map('map').setView([51.505, -0.09], 13);
+          L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+              attribution: '&copy; OpenStreetMap contributors'
+          }).addTo(map);
+
+          map.on('click', function(e) {
+            if(marker) map.removeLayer(marker);
+            marker = L.marker(e.latlng).addTo(map);
+            els.locationText.innerText = `${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)}`;
+          });
+        }
+        map.invalidateSize(); 
+      }, 300);
+    }
+
+    function handleFinalSubmit() {
+      const name = document.getElementById('of-name').value;
+      if(!name) { alert("Please enter your name"); return; }
+      
+      // Success Screen
+      els.orderForm.style.display = 'none';
+      els.successScreen.style.display = 'flex';
+      
+      startCountdown();
+
+      confetti({
+        particleCount: 150,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ['#3066eb', '#b27ce6', '#4cd964', '#ffffff']
+      });
+      setTimeout(() => {
+        confetti({ particleCount: 100, angle: 60, spread: 55, origin: { x: 0 } });
+        confetti({ particleCount: 100, angle: 120, spread: 55, origin: { x: 1 } });
+      }, 500);
+    }
+
+    function startCountdown() {
+      let duration = 2 * 60 * 60; // 2 hours
+      if(countdownInterval) clearInterval(countdownInterval);
+      updateTimer(duration);
+      countdownInterval = setInterval(() => {
+        duration--;
+        if(duration >= 0) {
+          updateTimer(duration);
+        } else {
+          clearInterval(countdownInterval);
+          els.countdown.textContent = "Arrived!";
+        }
+      }, 1000);
+    }
+
+    function updateTimer(seconds) {
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      const s = seconds % 60;
+      els.countdown.textContent = 
+        `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+    }
+  </script>
+</body>
+</html>
